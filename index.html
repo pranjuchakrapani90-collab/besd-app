@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BESD Field App</title>
+<meta name="theme-color" content="#111a2e">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="BESD">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>
+  html, body { margin: 0; height: 100%; background: #111a2e; overflow: hidden; }
+  #app { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; background: #eff3f9; }
+  #splash, #offline { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 18px; background: #111a2e; color: #cbd5e1;
+    font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; text-align: center; padding: 24px; }
+  #splash img, #offline img { width: 88px; height: 88px; border-radius: 22px; }
+  #splash b, #offline b { color: #fff; font-size: 20px; }
+  .bar { width: 120px; height: 4px; border-radius: 2px; background: #1e293b; overflow: hidden; }
+  .bar i { display: block; width: 40%; height: 100%; background: #3b82f6; animation: slide 1.1s ease-in-out infinite; }
+  @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+  button { font: inherit; color: #fff; background: #2563eb; border: 0; border-radius: 10px; padding: 12px 22px; }
+  [hidden] { display: none !important; }
+</style>
+<script src="config.js"></script>
+</head>
+<body>
+<div id="splash">
+  <img src="icons/icon-192.png" alt="">
+  <b>Bilasipara ESD</b>
+  <div class="bar"><i></i></div>
+</div>
+<div id="offline" hidden>
+  <img src="icons/icon-192.png" alt="">
+  <b>No internet</b>
+  <div>The BESD Field App needs mobile data or Wi-Fi to open.</div>
+  <button onclick="location.reload()">Try again</button>
+</div>
+<script>
+(function () {
+  var splash = document.getElementById('splash'), offline = document.getElementById('offline');
+  var url = window.BESD_APP_URL || '';
+  if (!/^https:\/\/script\.google\.com\/.+\/exec/.test(url)) {
+    splash.innerHTML = '<b>App address not set</b><div>Put the /exec web app URL in config.js.</div>';
+    return;
+  }
+  if (!navigator.onLine) { splash.hidden = true; offline.hidden = false; return; }
+  var f = document.createElement('iframe');
+  f.id = 'app';
+  f.title = 'BESD Field App';
+  // let the app inside use GPS, the camera and file pickers
+  f.allow = 'geolocation *; camera *; microphone *; clipboard-read *; clipboard-write *; fullscreen *';
+  f.src = url;
+  f.onload = function () { setTimeout(function () { splash.hidden = true; }, 300); };
+  document.body.appendChild(f);
+  setTimeout(function () { splash.hidden = true; }, 15000);
+  window.addEventListener('online', function () { if (!offline.hidden) location.reload(); });
+})();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+</script>
+</body>
+</html>
