@@ -1,6 +1,6 @@
 // Keeps the app shell (this wrapper page and its icons) available so Android treats it as an installable app.
 // The BESD app itself always loads live from Google Apps Script.
-var CACHE = 'besd-shell-v1';
+var CACHE = 'besd-shell-v2';
 var SHELL = ['./', 'index.html', 'config.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', function (e) {
