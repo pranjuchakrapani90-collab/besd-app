@@ -1,20 +1,49 @@
-// Keeps the app shell (this wrapper page and its icons) available so Android treats it as an installable app.
-// The BESD app itself always loads live from Google Apps Script.
-var CACHE = 'besd-shell-v2';
-var SHELL = ['./', 'index.html', 'config.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
+// BESD Online Field Register — service worker (v3).
+// - app.html (the app page downloaded from the server) is served from the phone: opens instantly, works offline.
+// - The shell files (this wrapper, config, icons) are served from the phone and refreshed in the background.
+// - Google web fonts are kept on the phone too. Server calls (script.google.com) are never touched here.
+var SHELL_CACHE = 'besd-shell-v3';
+var UI_CACHE = 'besd-ui';          // written by shell.js; never deleted on update
+var FONT_CACHE = 'besd-fonts';
+var SHELL = ['./', 'index.html', 'config.js', 'shell.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', function (e) {
-  e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(SHELL); }).then(function () { return self.skipWaiting(); }));
+  e.waitUntil(caches.open(SHELL_CACHE).then(function (c) { return c.addAll(SHELL); }).then(function () { return self.skipWaiting(); }));
 });
 self.addEventListener('activate', function (e) {
+  var keep = [SHELL_CACHE, UI_CACHE, FONT_CACHE];
   e.waitUntil(caches.keys().then(function (keys) {
-    return Promise.all(keys.filter(function (k) { return k !== CACHE; }).map(function (k) { return caches.delete(k); }));
+    return Promise.all(keys.filter(function (k) { return keep.indexOf(k) < 0; }).map(function (k) { return caches.delete(k); }));
   }).then(function () { return self.clients.claim(); }));
 });
-// Network first (so changes to config.js show up at once), cached copy when offline.
+
+function staleWhileRevalidate(cacheName, req, opts) {
+  return caches.open(cacheName).then(function (c) {
+    return c.match(req, opts).then(function (hit) {
+      var net = fetch(req).then(function (r) { if (r && (r.ok || r.type === 'opaque')) c.put(req, r.clone()); return r; });
+      if (hit) { net.catch(function () {}); return hit; }
+      return net;
+    });
+  });
+}
+
 self.addEventListener('fetch', function (e) {
-  if (e.request.method !== 'GET' || new URL(e.request.url).origin !== self.location.origin) return;
-  e.respondWith(fetch(e.request).then(function (r) {
-    var copy = r.clone(); caches.open(CACHE).then(function (c) { c.put(e.request, copy); }); return r;
-  }).catch(function () { return caches.match(e.request, { ignoreSearch: true }); }));
+  var req = e.request;
+  if (req.method !== 'GET') return;
+  var url = new URL(req.url);
+  if (url.origin === self.location.origin) {
+    if (/\/app\.html$/.test(url.pathname)) {
+      e.respondWith(caches.open(UI_CACHE).then(function (c) { return c.match(new URL('app.html', self.registration.scope).href); })
+        .then(function (hit) { return hit || fetch(req); }));
+      return;
+    }
+    if (/\/app-version$/.test(url.pathname)) return;
+    e.respondWith(staleWhileRevalidate(SHELL_CACHE, req, { ignoreSearch: true }).catch(function () {
+      return caches.match('index.html');
+    }));
+    return;
+  }
+  if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
+    e.respondWith(staleWhileRevalidate(FONT_CACHE, req).catch(function () { return new Response('', { status: 504 }); }));
+  }
 });

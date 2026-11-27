@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>BESD Field App</title>
+<title>BESD Online Field Register</title>
 <meta name="theme-color" content="#111a2e">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -14,11 +14,11 @@
 <style>
   html, body { margin: 0; height: 100%; background: #111a2e; overflow: hidden; }
   #app { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; background: #eff3f9; }
-  #splash, #offline { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
+  .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
     justify-content: center; gap: 18px; background: #111a2e; color: #cbd5e1;
     font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; text-align: center; padding: 24px; }
-  #splash img, #offline img { width: 88px; height: 88px; border-radius: 22px; }
-  #splash b, #offline b { color: #fff; font-size: 20px; }
+  .screen img { width: 88px; height: 88px; border-radius: 22px; }
+  .screen b { color: #fff; font-size: 20px; }
   .bar { width: 120px; height: 4px; border-radius: 2px; background: #1e293b; overflow: hidden; }
   .bar i { display: block; width: 40%; height: 100%; background: #3b82f6; animation: slide 1.1s ease-in-out infinite; }
   @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
@@ -26,40 +26,64 @@
   [hidden] { display: none !important; }
 </style>
 <script src="config.js"></script>
+<script src="shell.js"></script>
 </head>
 <body>
-<div id="splash">
+<div id="splash" class="screen">
   <img src="icons/icon-192.png" alt="">
   <b>Bilasipara ESD</b>
+  <div id="msg">Opening…</div>
   <div class="bar"><i></i></div>
 </div>
-<div id="offline" hidden>
+<div id="offline" class="screen" hidden>
   <img src="icons/icon-192.png" alt="">
   <b>No internet</b>
-  <div>The BESD Field App needs mobile data or Wi-Fi to open.</div>
+  <div>Open the app once with mobile data or Wi-Fi.<br>After that it also opens and works with no network.</div>
   <button onclick="location.reload()">Try again</button>
 </div>
 <script>
+/* Opens the copy of the app kept on the phone (app.html). The first time, it is downloaded from the
+   Apps Script web app. If the server still has the old loader (no offline support yet), the app is shown
+   live inside a frame, as before. */
 (function () {
-  var splash = document.getElementById('splash'), offline = document.getElementById('offline');
+  var splash = document.getElementById('splash'), offline = document.getElementById('offline'), msg = document.getElementById('msg');
   var url = window.BESD_APP_URL || '';
+  var legacyOnly = /[?&]nosw=1/.test(location.search);
   if (!/^https:\/\/script\.google\.com\/.+\/exec/.test(url)) {
     splash.innerHTML = '<b>App address not set</b><div>Put the /exec web app URL in config.js.</div>';
     return;
   }
-  if (!navigator.onLine) { splash.hidden = true; offline.hidden = false; return; }
-  var f = document.createElement('iframe');
-  f.id = 'app';
-  f.title = 'BESD Field App';
-  // let the app inside use GPS, the camera and file pickers
-  f.allow = 'geolocation *; camera *; microphone *; clipboard-read *; clipboard-write *; fullscreen *';
-  f.src = url;
-  f.onload = function () { setTimeout(function () { splash.hidden = true; }, 300); };
-  document.body.appendChild(f);
-  setTimeout(function () { splash.hidden = true; }, 15000);
-  window.addEventListener('online', function () { if (!offline.hidden) location.reload(); });
+  function showOffline() { splash.hidden = true; offline.hidden = false; }
+  function legacy() {   // live page inside a frame (needs network every time)
+    if (!navigator.onLine) return showOffline();
+    var f = document.createElement('iframe');
+    f.id = 'app'; f.title = 'BESD Online Field Register';
+    f.allow = 'geolocation *; camera *; microphone *; clipboard-read *; clipboard-write *; fullscreen *';
+    f.src = url;
+    f.onload = function () { setTimeout(function () { splash.hidden = true; }, 300); };
+    document.body.appendChild(f);
+    setTimeout(function () { splash.hidden = true; }, 15000);
+    window.addEventListener('online', function () { if (!offline.hidden) location.reload(); });
+  }
+  function controlled() {   // the service worker must control this page before app.html can be served from the phone
+    if (navigator.serviceWorker.controller) return Promise.resolve();
+    return new Promise(function (res, rej) {
+      navigator.serviceWorker.addEventListener('controllerchange', function () { res(); });
+      setTimeout(function () { navigator.serviceWorker.controller ? res() : rej(new Error('no service worker')); }, 8000);
+    });
+  }
+  function open() { location.replace('app.html'); }
+
+  if (legacyOnly || !('serviceWorker' in navigator) || !window.caches) { legacy(); return; }
+  navigator.serviceWorker.register('sw.js').then(controlled).then(function () {
+    return caches.open('besd-ui').then(function (c) { return c.match(new URL('app.html', location.href).href); });
+  }).then(function (hit) {
+    if (hit) return open();
+    if (!navigator.onLine) return showOffline();
+    msg.textContent = 'Downloading the app to this phone (first time only)…';
+    return window.BESD_FETCH_UI().then(open, function () { legacy(); });   // old loader: no ?raw=ui yet
+  }).catch(function () { legacy(); });
 })();
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 </script>
 </body>
 </html>
