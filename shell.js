@@ -1,4 +1,4 @@
-/* BESD Online Field Register — installed-app shell (v3).
+/* BESD Online Field Register — installed-app shell (v4).
  * The app page itself (besd-ui-vX.Y.html from the Drive folder) is downloaded once from the Apps Script web app
  * and kept on the phone, so the app opens instantly and also with no network. This file is loaded at the top
  * of that page. It tells the page to talk to the server directly (fetch) and looks for a newer page in the
@@ -9,11 +9,15 @@
   var KEY_PAGE = new URL('app.html', location.href).href;
   var KEY_VER = new URL('app-version', location.href).href;
 
-  window.BESD_SHELL = { exec: EXEC, shell: 3 };
+  window.BESD_SHELL = { exec: EXEC, shell: 4 };
+  /* install tags: without the manifest link on the page Chrome says "This app cannot be installed" */
+  window.BESD_INSTALL_TAGS = '<link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#111a2e">' +
+    '<link rel="icon" href="icons/icon-192.png"><link rel="apple-touch-icon" href="icons/apple-touch-icon.png">';
 
   /* store a downloaded page; config.js + shell.js are put at the very top of its <head> */
   window.BESD_STORE_UI = function (name, html) {
     var inject = '<script src="config.js"></scr' + 'ipt><script src="shell.js"></scr' + 'ipt>';
+    if (!/rel=["']?manifest/i.test(html)) inject += window.BESD_INSTALL_TAGS;
     var page = /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, function (m) { return m + inject; }) : inject + html;
     return caches.open(UI_CACHE).then(function (c) {
       return Promise.all([

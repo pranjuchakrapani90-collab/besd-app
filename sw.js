@@ -1,8 +1,8 @@
-// BESD Online Field Register — service worker (v3).
+// BESD Online Field Register — service worker (v4).
 // - app.html (the app page downloaded from the server) is served from the phone: opens instantly, works offline.
 // - The shell files (this wrapper, config, icons) are served from the phone and refreshed in the background.
 // - Google web fonts are kept on the phone too. Server calls (script.google.com) are never touched here.
-var SHELL_CACHE = 'besd-shell-v3';
+var SHELL_CACHE = 'besd-shell-v4';
 var UI_CACHE = 'besd-ui';          // written by shell.js; never deleted on update
 var FONT_CACHE = 'besd-fonts';
 var SHELL = ['./', 'index.html', 'config.js', 'shell.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
@@ -27,6 +27,18 @@ function staleWhileRevalidate(cacheName, req, opts) {
   });
 }
 
+// The saved app page must link the manifest, or Chrome says "This app cannot be installed".
+// Pages saved before v4 lack it, so add it on the way out (the saved copy itself is not changed).
+var INSTALL_TAGS = '<link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#111a2e">' +
+  '<link rel="icon" href="icons/icon-192.png"><link rel="apple-touch-icon" href="icons/apple-touch-icon.png">';
+function withInstallTags(res) {
+  return res.clone().text().then(function (html) {
+    if (/rel=["']?manifest/i.test(html)) return res;
+    var page = /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, function (m) { return m + INSTALL_TAGS; }) : INSTALL_TAGS + html;
+    return new Response(page, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  }).catch(function () { return res; });
+}
+
 self.addEventListener('fetch', function (e) {
   var req = e.request;
   if (req.method !== 'GET') return;
@@ -34,7 +46,7 @@ self.addEventListener('fetch', function (e) {
   if (url.origin === self.location.origin) {
     if (/\/app\.html$/.test(url.pathname)) {
       e.respondWith(caches.open(UI_CACHE).then(function (c) { return c.match(new URL('app.html', self.registration.scope).href); })
-        .then(function (hit) { return hit || fetch(req); }));
+        .then(function (hit) { return hit ? withInstallTags(hit) : fetch(req); }));
       return;
     }
     if (/\/app-version$/.test(url.pathname)) return;
